@@ -107,6 +107,7 @@ func (g *WemoDeviceAction) Run() {
   }
 }
 
+
 //This gadget quieries state and needs an IP Address, a trigger and outputs the state of the device.
 type WemoDeviceStatus struct {
 	flow.Gadget
@@ -135,6 +136,7 @@ func (g *WemoDeviceStatus) Run() {
     g.Out.Send(output)
   }
 }
+
 
 // Lookup information to determine what decoder to use.
 // Registers as "NodeMap".
