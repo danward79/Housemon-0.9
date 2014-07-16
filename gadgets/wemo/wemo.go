@@ -7,14 +7,69 @@ import (
   "github.com/savaki/go.wemo" 
   "fmt"
   "strings"
+  "log"
+  "time"
+  "strconv"
 )
 
 func init() {
 	glog.Infoln("Wemo Gadget Init...")
-	flow.Registry["WemoDeviceAction"] = func() flow.Circuitry { return new(WemoDeviceAction) }
+	flow.Registry["WemoSubscribe"] = func() flow.Circuitry { return new(WemoSubscribe) }
+  flow.Registry["WemoDeviceAction"] = func() flow.Circuitry { return new(WemoDeviceAction) }
   flow.Registry["WemoDeviceStatus"] = func() flow.Circuitry { return new(WemoDeviceStatus) }
   flow.Registry["WemoMap"] = func() flow.Circuitry { return &WemoMap{} }
 }
+
+
+// This gadget subscribes to Wemo events and manages subscriptions
+// Needs a callback IP Address:Port, a subscription timeout and outputs the state of the device.
+type WemoSubscribe struct {
+	flow.Gadget
+  Address flow.Input
+  Timeout flow.Input
+  Out flow.Output
+}
+
+func (g *WemoSubscribe) Run() {
+ 
+  var listenerAddress string = ""
+  var timeout int
+  
+  for m := range g.Address{
+    listenerAddress = m.(string)
+  }
+
+  for m := range g.Timeout {
+    timeout, _ = strconv.Atoi(m.(string))
+  }
+  
+  api, _ := wemo.NewByInterface("en0")
+  
+  devices, _ := api.DiscoverAll(3*time.Second)
+ 
+  subscriptions := make(map[string]*wemo.SubscriptionInfo)
+
+  for _, device := range devices {
+    _, err := device.ManageSubscription(listenerAddress, timeout, subscriptions)
+    if err != 200 {
+      log.Println("Initial Error Subscribing: ", err)   
+    }
+  }
+  
+  cs := make(chan wemo.SubscriptionEvent)
+
+  go wemo.Listener(listenerAddress, cs)
+
+  for m := range cs{
+    if _, ok := subscriptions[m.Sid]; ok {
+      subscriptions[m.Sid].State = m.State
+      output := fmt.Sprintf("Switch: %v, %v = %v", subscriptions[m.Sid].FriendlyName, subscriptions[m.Sid].Host, subscriptions[m.Sid].State)
+      g.Out.Send(output)
+    }
+  }  
+  
+}
+
 
 //This gadget carries out an action and needs an IP Address, an action and a trigger
 type WemoDeviceAction struct {
