@@ -18,8 +18,8 @@ circuits.main =
 # init circuit for HouseMon, which starts its own http server.
 circuits.init =
   gadgets: [
+    { name: "reload", type: "WSLiveReload" } # needed if using node in dev mode
     { name: "mqtt", type: "MQTTServer" }
-		# { name: "replay", type: "replay" }
     { name: "sub", type: "DataSub" }
     { name: "pub", type: "MQTTPub" }
     { name: "dummy", type: "Pipe" } # needed for dispatcher in HouseMon
@@ -29,8 +29,9 @@ circuits.init =
     { name: "aggr", type: "Aggregator" }
     { name: "db", type: "LevelDB" }
     { name: "serial", type: "serial" }
-   # { name: "wemo", type: "wemo" }
-   # { name: "demo", type: "demo" }
+    # { name: "wemo", type: "wemo" }
+    { name: "wemoSubscribe", type: "wemoSubscribe" }
+
   ]
   wires: [
     { from: "mqtt.PortOut", to: "pub.Port" }
@@ -116,12 +117,27 @@ circuits.nodesJeeLabs =
     { external: "Out", internal: "nm.Out" }
   ]
 
+# the node mapping for nodes at JeeLabs, as pre-configured circuit
+circuits.nodesWardies =
+  gadgets: [
+    { name: "nm", type: "NodeMap" }
+  ]
+  feeds: [  
+    { data: "RFg212i11,emonLCD,bedroom",        to: "nm.Info" }
+    { data: "RFg212i16,outdoorClimate,balcony", to: "nm.Info" }
+    { data: "RFg212i17,baro,lounge",            to: "nm.Info" }
+  ]
+  labels: [
+    { external: "In", internal: "nm.In" }
+    { external: "Out", internal: "nm.Out" }
+  ]
+
 # pipeline used for decoding RF12demo data and storing it in the database
 circuits.rf12toDatabase =
   gadgets: [
     { name: "st", type: "SketchType" }
     { name: "d1", type: "Dispatcher" }
-    { name: "nm", type: "nodesJeeLabs" }
+    { name: "nm", type: "nodesWardies" }
     { name: "d2", type: "Dispatcher" }
     { name: "rd", type: "Readings" }
     { name: "ss", type: "PutReadings" }
@@ -133,36 +149,11 @@ circuits.rf12toDatabase =
     { from: "st.Out", to: "d1.In" }
     { from: "d1.Out", to: "nm.In" }
     { from: "nm.Out", to: "d2.In" } 
-    
-    # 2014-05-18 19:58:45.781146327 +1000 EST
-    # map[<node>:11]
-    # {Tag:<location> Msg:bedroom}
-    # {Tag:<dispatch> Msg:emonLCD}
-    # [11 233 8 255]
-       
-    { from: "d2.Out", to: "rd.In" }
-    
-    # 2014-05-18 20:00:25.795893693 +1000 EST
-    # map[<node>:11]
-    # {Tag:<location> Msg:bedroom}
-    # map[<reading>:1 temp:2287 light:0]
-    
-    { from: "rd.Out", to: "ss.In" }
-    
-    # map[asof:2014-05-18 20:07:35.858844062 +1000 EST decoder:emonLCD rf12:map[<RF12demo>:12 band:433 group:212 id:31] node:map[<node>:11] location:bedroom reading:map[temp:2300 light:0] other:[[31 116 20 7 9]]]
-     
-    { from: "ss.Out", to: "f2.In" }
-    
-    # {Tag:/reading/RF12:212:11 Msg:map[ms:1400407795879 val:map[temp:2293 light:0] loc:bedroom typ:emonLCD id:RF12:212:11]}
-    
+    { from: "d2.Out", to: "rd.In" }   
+    { from: "rd.Out", to: "ss.In" }     
+    { from: "ss.Out", to: "f2.In" } 
     { from: "f2.Out:sr", to: "sr.In" }
-    
-    # {Tag:/reading/RF12:212:11 Msg:map[ms:1400407885892 val:map[temp:2300 light:0] loc:bedroom typ:emonLCD id:RF12:212:11]}
-    
     { from: "f2.Out:db", to: "db.In" }
-    
-    # {Tag:/reading/RF12:212:11 Msg:map[ms:1400408035916 val:map[temp:2300 light:0] loc:bedroom typ:emonLCD id:RF12:212:11]}
-    
     { from: "sr.Out", to: "db.In" }
   ]
   feeds: [
@@ -181,97 +172,93 @@ circuits.serial =
     { name: "f1", type: "FanOut" }
     { name: "lg", type: "Logger" }
     { name: "db", type: "rf12toDatabase" }
+    # { name: "pr", type: "Printer" }
   ]
   wires: [
     { from: "sp.From", to: "ts.In" }
     { from: "ts.Out", to: "f1.In" }
     { from: "f1.Out:lg", to: "lg.In" }
     { from: "f1.Out:db", to: "db.In" }
+    # { from: "f1.Out:pr", to: "pr.In" }
   ]
   feeds: [
     { data: "/dev/ttyUSB0", to: "sp.Port" }
     { data: "./logger", to: "lg.Dir" }
   ]
 
-# Wemo mapping for devices at djw's place, as pre-configured circuit
-# circuits.wemoMap =
-#  gadgets: [
-#    { name: "wm", type: "WemoMap" }
-#  ]
-#  feeds: [
-#    { data: "192.168.0.14:49153,switch,Wendys Balls",  to: "wm.Info" }
-#    { data: "192.168.0.15:49153,switch,Lounge Lamp",   to: "wm.Info" }
-#  ]
-#  labels: [
-#    { external: "In", internal: "wm.In" }
-#    { external: "Out", internal: "wm.Out" }
-#  ]
-# wemo test
-#circuits.wemo =
-#  gadgets: [
-#    { name: "c", type: "Clock" }
-#    { name: "f1", type: "FanOut" }
-#    { name: "wa", type: "WemoDeviceAction" }
-#    { name: "ws", type: "WemoDeviceStatus" }
-#    { name: "d", type: "Delay"}
-#    { name: "ts", type: "TimeStamp"}
-#    { name: "pr", type: "Printer"}
-#    { name: "f2", type: "FanOut" }
-#    { name: "lg", type: "Logger" }
-#    { name: "wm", type: "wemoMap" }
-#  ]
-#  wires: [
-#    { from: "c.Out", to: "f1.In" }
-#    { from: "f1.Out:wa", to: "wa.Trigger" }
-#    { from: "f1.Out:d", to: "d.In" }
-#    { from: "d.Out", to: "ws.Trigger" }
-#    { from: "ws.Out", to: "ts.In" }
-#    { from: "ts.Out", to: "f2.In" }
-#    { from: "f2.Out:nm", to: "wm.In" }
-#    { from: "f2.Out:lg", to: "lg.In" }
-#    { from: "wm.Out", to: "pr.In" }    
-#  ]
-#  feeds: [
-#    { data: "20s", to: "c.In" }
-#    { data: "192.168.0.15:49153", to: "wa.Address" }
-#    { data: "192.168.0.15:49153", to: "ws.Address" }
-#    { data: "None", to: "wa.Action"}
-#    { data: "1s", to: "d.Delay"}
-#    { data: "./wemologger", to: "lg.Dir" }
-#  ]
-
-# jeeboot server test
-circuits.jeeboot =
+# Wemo Subscription
+circuits.wemoSubscribe = 
   gadgets: [
-    { name: "sp", type: "SerialPort" }
-    { name: "rf", type: "Sketch-RF12demo" }
-    { name: "sk", type: "Sink" }
-    { name: "jb", type: "JeeBoot" }
-  ]
-  wires: [
-    { from: "sp.From", to: "rf.In" }
-    { from: "rf.Out", to: "sk.In" }
-    { from: "rf.Rej", to: "sk.In" }
-    { from: "rf.Oob", to: "jb.In" }
-    { from: "jb.Out", to: "sp.To" }
+    { name: "ws", type: "WemoSubscribe" }
+    { name: "ts", type: "TimeStamp"}
+    { name: "f1", type: "FanOut" }
+    { name: "lg", type: "Logger" }
+    { name: "pr", type: "Printer"}
   ]
   feeds: [
-    { data: "/dev/tty.usbserial-A6666KGL", to: "sp.Port" }
+    { data: "eth0", to: "ws.EthInterface" }
+    { data: "192.168.0.8:6868", to: "ws.Address" }
+    { data: "300",   to: "ws.Timeout" }
+    { data: "./wemologger", to: "lg.Dir" }
+  ]
+  wires: [
+    { from: "ws.Out", to: "ts.In" }
+    { from: "ts.Out", to: "f1.In" }
+    { from: "f1.Out:lg", to: "lg.In" }
+    { from: "f1.Out:db", to: "pr.In" }    
+  ]
+  labels: [
+    { external: "Out", internal: "ws.Out" }
   ]
 
-    
-# simple never-ending demo
-circuits.demo =
+# Wemo mapping for devices at djw's place, as pre-configured circuit
+ circuits.wemoMap =
+  gadgets: [
+    { name: "wm", type: "WemoMap" }
+  ]
+  feeds: [
+    { data: "192.168.0.14:49153,switch,Wendys Balls",  to: "wm.Info" }
+    { data: "192.168.0.15:49153,switch,Lounge Lamp",   to: "wm.Info" }
+  ]
+  labels: [
+    { external: "In", internal: "wm.In" }
+    { external: "Out", internal: "wm.Out" }
+  ]
+
+# wemo test
+circuits.wemo =
   gadgets: [
     { name: "c", type: "Clock" }
-    { name: "p", type: "Printer" }
+    { name: "f1", type: "FanOut" }
+    { name: "wa", type: "WemoDeviceAction" }
+    { name: "ws", type: "WemoDeviceStatus" }
+    { name: "d", type: "Delay"}
+    { name: "ts", type: "TimeStamp"}
+    { name: "pr", type: "Printer"}
+    { name: "f2", type: "FanOut" }
+    { name: "lg", type: "Logger" }
+    { name: "wm", type: "wemoMap" }
   ]
   wires: [
-    {from: "c.Out", to: "p.In"}
+    { from: "c.Out", to: "f1.In" }
+    { from: "f1.Out:wa", to: "wa.Trigger" }
+    { from: "f1.Out:d", to: "d.In" }
+    { from: "d.Out", to: "ws.Trigger" }
+    { from: "ws.Out", to: "ts.In" }
+    { from: "ts.Out", to: "f2.In" }
+    { from: "f2.Out:wm", to: "wm.In" }
+    { from: "f2.Out:lg", to: "lg.In" }
+    { from: "wm.Out", to: "pr.In" }    
   ]
   feeds: [
-    { data: "10s", to: "c.In" }
+    { data: "20s", to: "c.In" }
+    { data: "192.168.0.15:49153", to: "wa.Address" }
+    { data: "192.168.0.15:49153", to: "ws.Address" }
+    { data: "None", to: "wa.Action"}
+    { data: "1s", to: "d.Delay"}
+    { data: "./wemologger", to: "lg.Dir" }
   ]
+
   
 # pre-load some driver info into the database
 circuits.driverFill =
@@ -338,11 +325,9 @@ circuits.driverFill =
       data: { name: "Pressure", unit: "mPA", scale: 2 } }
     { to: "db.In", tag: "/driver/baro/battery", \
       data: { name: "Battery", unit: "mV", scale: 0 } }
-      
-    { to: "db.In", tag: "/driver/wemo/switch", \
-      data: { name: "Switch", unit: "(0/1)" } }
   ]
-  
+
+
 # pre-load some table info into the database
 circuits.tableFill =
   gadgets: [

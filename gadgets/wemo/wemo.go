@@ -25,6 +25,7 @@ func init() {
 // Needs a callback IP Address:Port, a subscription timeout and outputs the state of the device.
 type WemoSubscribe struct {
 	flow.Gadget
+  EthInterface flow.Input
   Address flow.Input
   Timeout flow.Input
   Out flow.Output
@@ -34,6 +35,7 @@ func (g *WemoSubscribe) Run() {
  
   var listenerAddress string = ""
   var timeout int
+  var ethInterface string = ""
   
   for m := range g.Address{
     listenerAddress = m.(string)
@@ -43,7 +45,11 @@ func (g *WemoSubscribe) Run() {
     timeout, _ = strconv.Atoi(m.(string))
   }
   
-  api, _ := wemo.NewByInterface("en0")
+  for m := range g.EthInterface{
+    ethInterface = m.(string)
+  }
+  
+  api, _ := wemo.NewByInterface(ethInterface)
   
   devices, _ := api.DiscoverAll(3*time.Second)
  
@@ -63,7 +69,7 @@ func (g *WemoSubscribe) Run() {
   for m := range cs{
     if _, ok := subscriptions[m.Sid]; ok {
       subscriptions[m.Sid].State = m.State
-      output := fmt.Sprintf("Switch: %v, %v = %v", subscriptions[m.Sid].FriendlyName, subscriptions[m.Sid].Host, subscriptions[m.Sid].State)
+      output := fmt.Sprintf("Switch:%v, %v = %v", subscriptions[m.Sid].FriendlyName, subscriptions[m.Sid].Host, subscriptions[m.Sid].State)
       g.Out.Send(output)
     }
   }  
@@ -107,7 +113,6 @@ func (g *WemoDeviceAction) Run() {
   }
 }
 
-
 //This gadget quieries state and needs an IP Address, a trigger and outputs the state of the device.
 type WemoDeviceStatus struct {
 	flow.Gadget
@@ -136,7 +141,6 @@ func (g *WemoDeviceStatus) Run() {
     g.Out.Send(output)
   }
 }
-
 
 // Lookup information to determine what decoder to use.
 // Registers as "NodeMap".
